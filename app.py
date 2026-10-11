@@ -196,3 +196,61 @@ def debug2(keyword: str = "airpods pro", n: str = ""):
     with ThreadPoolExecutor(max_workers=9) as pool:
         out.update(dict(pool.map(run, jobs.items())))
     return out
+
+
+def _shape(o, depth=0):
+    """Structure of a JSON value without the bulk, for debugging response formats."""
+    if depth > 6:
+        return "..."
+    if isinstance(o, dict):
+        return {k: _shape(v, depth + 1) for k, v in list(o.items())[:40]}
+    if isinstance(o, list):
+        return [f"list[{len(o)}]"] + ([_shape(o[0], depth + 1)] if o else [])
+    if isinstance(o, str):
+        return o[:70]
+    return o
+
+
+@app.get("/api/debug/template")
+def debug_template(template: str = "amazon_serp", key: str = "keyword", value: str = "airpods pro"):
+    """Show the shape of what Nimble returns for one template run, via raw HTTP and via the SDK."""
+    import httpx
+    out = {"template": template, "params": {key: value}}
+    try:
+        r = httpx.post("https://sdk.nimbleway.com/v2/extract/templates/run", timeout=120,
+                       headers={"Authorization": "Bearer " + llm.clean_key("NIMBLE_API_KEY")},
+                       json={"template": template, "params": {key: value}})
+        out["raw_status"] = r.status_code
+        try:
+            out["raw_shape"] = _shape(r.json())
+        except Exception:
+            out["raw_text"] = r.text[:600]
+    except Exception as e:
+        out["raw_error"] = repr(e)[:300]
+    try:
+        res = sources.client().extract.templates.run(template=template, params={key: value}).to_dict()
+        out["sdk_shape"] = _shape(res)
+        rows = sources.find_rows((res.get("data") or {}).get("parsing"))
+        out["find_rows"] = {"count": len(rows), "first": _shape(rows[0]) if rows else None}
+    except Exception as e:
+        out["sdk_error"] = repr(e)[:300]
+    return out
+
+
+@app.get("/api/debug/template_info")
+def debug_template_info(template: str = "amazon_serp"):
+    try:
+        return _shape(sources.client().extract.templates.get(template).to_dict())
+    except Exception as e:
+        return {"error": repr(e)[:300]}
+
+
+@app.get("/api/run")
+def run_get(q: str, chaos: bool = False):
+    """Same as POST /api/query but returns every event at once."""
+    events = []
+    engine.run(q, events.append, chaos=chaos)
+    for e in events:
+        if e.get("type") == "result":
+            e["rows"] = e["rows"][:8]
+    return events

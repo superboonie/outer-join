@@ -185,6 +185,7 @@ def scan(call, chaos=False):
     else:
         raise ValueError(f"unknown scan kind {kind}")
     rows = [r for r in rows if isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values())]
+    rows = [r for r in rows if any(v not in (None, "", [], {}) for v in r.values())]  # drop hollow rows
     if not rows:
         raise EmptyScan(f"0 rows from {call.get('label')}")
     for r in rows:
