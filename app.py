@@ -254,3 +254,47 @@ def run_get(q: str, chaos: bool = False):
         if e.get("type") == "result":
             e["rows"] = e["rows"][:8]
     return events
+
+
+@app.get("/api/debug/one")
+def debug_one(job: str, q: str = "airpods pro", domain: str = "", focus: str = "", template: str = "amazon_serp",
+              key: str = "keyword", url: str = "", render: bool = False, n: str = ""):
+    """Test a single Nimble route and report what comes back."""
+    import re
+    c = sources.client()
+    price = re.compile(r"\$\s?\d[\d,]*\.\d\d")
+
+    def md_info(md):
+        hits = [m.start() for m in price.finditer(md)]
+        at = hits[0] if hits else 0
+        return {"len": len(md), "prices_found": len(hits), "first_prices": price.findall(md)[:8],
+                "head": md[:250], "around_first_price": md[max(0, at - 300):at + 200]}
+    try:
+        if job == "search":
+            kw = {"query": q, "max_results": 6}
+            if domain:
+                kw["include_domains"] = [domain]
+            if focus:
+                kw["focus"] = focus
+            res = c.search(**kw).to_dict()
+            rs = res.get("results") or []
+            return {"count": len(rs), "results": [_shape(r) for r in rs[:3]], "answer": (res.get("answer") or "")[:200]}
+        if job == "tpl":
+            res = c.extract.templates.run(template=template, params={key: q}, formats=["markdown"]).to_dict()
+            d = res.get("data") or {}
+            return {"url": res.get("url"), "parsing": _shape(d.get("parsing")), "markdown": md_info(d.get("markdown") or "")}
+        if job == "extract":
+            target = url or ("https://www.amazon.com/s?k=" + q.replace(" ", "+"))
+            kw = {"url": target, "formats": ["markdown"]}
+            if render:
+                kw["render"] = True
+            res = c.extract.run(**kw).to_dict()
+            d = res.get("data") or {}
+            return {"url": target, "status": res.get("status"), "status_code": res.get("status_code"),
+                    "driver": (res.get("metadata") or {}).get("driver"), "markdown": md_info(d.get("markdown") or "")}
+        if job == "scan":
+            rows, endpoint = sources.scan({"kind": "template", "template": template, "params": {key: q}, "label": "debug"})
+            return {"endpoint": endpoint, "count": len(rows), "rows": rows[:4]}
+        return {"error": "job must be search, tpl, extract or scan"}
+    except Exception as e:
+        return {"error": repr(e)[:400]}

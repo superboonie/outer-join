@@ -4,6 +4,7 @@ import json
 import re
 import time
 import uuid
+from urllib.parse import quote_plus
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 import sentry_sdk
@@ -66,6 +67,8 @@ def _expand(c, plan, emit):
             binds = [dict(zip(names, r)) for r in rows[:12]]
         for b in binds:
             call = _fill({k: s.get(k) for k in ("kind", "template", "params", "query", "domains", "url", "columns")}, b)
+            if s.get("url"):  # values placed inside a URL must be URL-encoded
+                call["url"] = _fill(s["url"], {k: quote_plus(str(v)) for k, v in b.items()})
             call.update(tbl=tbl, bind=b)
             what = call.get("template") or (",".join(call.get("domains") or []) or call.get("url") or "web")
             arg = call.get("query") or " ".join(str(v) for v in (call.get("params") or {}).values()) or ""

@@ -145,6 +145,20 @@ def _mock_rows(label):
              "rating": round(3.9 + (h >> i) % 10 / 10, 1), "url": "https://example.com/mock"} for i in range(4)]
 
 
+PAGE_COLS = ("name (the item's title), price (a number, no currency sign), rating (a number), reviews (a number), "
+             "url (absolute link to the item if shown), plus any other clearly useful field. One row per listed item.")
+
+
+def _solid(rows):
+    """Drop rows that carry no data."""
+    return [r for r in rows if isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values())]
+
+
+def _rows_from_page(md, cols=None):
+    out = llm.ask_json(llm.EXTRACT.format(cols=cols or PAGE_COLS, page=md[:60000]), fast=True)
+    return _solid(out.get("rows") or [])
+
+
 # ---------- the three scan kinds ----------
 
 def scan(call, chaos=False):
@@ -157,10 +171,26 @@ def scan(call, chaos=False):
         rows = _mock_rows(str(call.get("label")))
         endpoint, default = "MOCK", ""
     elif kind == "template":
-        res = client().extract.templates.run(template=call["template"], params=call["params"]).to_dict()
+        res = client().extract.templates.run(template=call["template"], params=call["params"], formats=["markdown"]).to_dict()
         _count("extract.templates.run")
-        rows = find_rows((res.get("data") or {}).get("parsing"))
+        data = res.get("data") or {}
         endpoint, default = "extract.templates.run", res.get("url")
+        try:
+            rows = _solid(find_rows(data.get("parsing")))
+        except EmptyScan:
+            rows = []
+        if not rows:  # Nimble fetched the page but the template's parser came back empty: structure the page with Gemini
+            md = data.get("markdown") or ""
+            if md.strip():
+                rows = _rows_from_page(md, call.get("columns"))
+                endpoint = "extract.templates.run + gemini"
+        if not rows and default:  # last try: fetch the same URL through plain Extract with rendering
+            res2 = client().extract.run(url=default, formats=["markdown"], render=True).to_dict()
+            _count("extract.run")
+            md = (res2.get("data") or {}).get("markdown") or ""
+            if md.strip():
+                rows = _rows_from_page(md, call.get("columns"))
+                endpoint = "extract.run + gemini"
     elif kind == "search":
         kw = {"query": call["query"], "max_results": 10}
         if call.get("domains"):
@@ -179,13 +209,11 @@ def scan(call, chaos=False):
         md = ((res.get("data") or {}).get("markdown") or "")[:60000]
         if not md.strip():
             raise EmptyScan(f"no content at {call['url']}")
-        out = llm.ask_json(llm.EXTRACT.format(cols=call.get("columns") or "whatever best describes the main list", page=md))
-        rows = [r for r in out.get("rows") or [] if isinstance(r, dict)]
-        endpoint, default = "extract.run", call["url"]
+        rows = _rows_from_page(md, call.get("columns"))
+        endpoint, default = "extract.run + gemini", call["url"]
     else:
         raise ValueError(f"unknown scan kind {kind}")
-    rows = [r for r in rows if isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values())]
-    rows = [r for r in rows if any(v not in (None, "", [], {}) for v in r.values())]  # drop hollow rows
+    rows = _solid(rows)
     if not rows:
         raise EmptyScan(f"0 rows from {call.get('label')}")
     for r in rows:
