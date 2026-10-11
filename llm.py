@@ -6,8 +6,14 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 _client = None
 
 
+def clean_key(name):
+    """Pasted keys often pick up spaces, line breaks or a long dash. Strip those."""
+    v = (os.getenv(name) or "").strip().strip('"').strip("'")
+    return v.replace("\u2013", "-").replace("\u2014", "-").replace(" ", "").replace("\n", "")
+
+
 def live():
-    return bool(os.getenv("GEMINI_API_KEY"))
+    return bool(clean_key("GEMINI_API_KEY"))
 
 
 def ask_json(prompt):
@@ -15,7 +21,7 @@ def ask_json(prompt):
     from google import genai
     from google.genai import types
     if _client is None:
-        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        _client = genai.Client(api_key=clean_key("GEMINI_API_KEY"))
     r = _client.models.generate_content(
         model=MODEL, contents=prompt,
         config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0))

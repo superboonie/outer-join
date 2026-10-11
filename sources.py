@@ -34,14 +34,14 @@ class ChaosInjected(Exception):
 
 
 def live():
-    return bool(os.getenv("NIMBLE_API_KEY"))
+    return bool(llm.clean_key("NIMBLE_API_KEY"))
 
 
 def client():
     global _client
     if _client is None:
         from nimble_python import Nimble
-        _client = Nimble(api_key=os.environ["NIMBLE_API_KEY"], timeout=120.0, max_retries=1)
+        _client = Nimble(api_key=llm.clean_key("NIMBLE_API_KEY"), timeout=120.0, max_retries=1)
     return _client
 
 
