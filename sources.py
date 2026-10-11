@@ -80,15 +80,22 @@ def catalog(refresh=False):
                 break
     except Exception as e:  # keep the app usable if the catalog call fails
         print("catalog fallback:", repr(e))
+    for name, known in FALLBACK_CATALOG.items():  # the list call may omit input schemas; fill the documented ones
+        if name in cat and not cat[name]["params"]:
+            cat[name].update(params=known["params"], required=known["required"], desc=cat[name]["desc"] or known["desc"])
     _catalog = cat or dict(FALLBACK_CATALOG)
     return _catalog
 
 
 def catalog_text(limit=160):
+    cat = catalog()
+    # templates whose params we know go first, then official ones, then community ones
+    order = sorted(cat, key=lambda n: (not cat[n]["params"], "community" in n))
     lines = []
-    for name, t in list(catalog().items())[:limit]:
+    for name in order[:limit]:
+        t = cat[name]
         ps = ", ".join(f"{k}{'*' if k in t['required'] else ''}" for k in list(t["params"])[:8])
-        lines.append(f"- {name} [{t['domain']}] {t['desc']} | params: {ps}  (* = required)")
+        lines.append(f"- {name} [{t['domain']}] {t['desc']} | params: {ps or 'UNKNOWN, do not use; use kind search with this domain instead'}")
     return "\n".join(lines)
 
 
