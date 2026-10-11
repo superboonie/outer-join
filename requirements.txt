@@ -1,0 +1,7 @@
+nimble_python
+google-genai
+sentry-sdk
+psycopg[binary]
+fastapi
+uvicorn
+python-dotenv

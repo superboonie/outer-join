@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OuterJoin</title>
+<style>
+  :root { --bg:#0d0f12; --panel:#15181d; --line:#262b33; --text:#e8eaed; --dim:#8b93a1; --accent:#edc602; --ok:#4ade80; --bad:#f87171; --info:#7cc4ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:24px 16px 64px; }
+  header { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+  h1 { font-size:26px; margin:0; letter-spacing:-.02em; } h1 span { color:var(--accent); }
+  .tag { color:var(--dim); }
+  .pills { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .pill { font:12px ui-monospace, Menlo, monospace; padding:3px 9px; border:1px solid var(--line); border-radius:99px; color:var(--dim); }
+  .pill.on { color:var(--ok); border-color:#1f4d33; } .pill.off { color:var(--bad); border-color:#5b2626; }
+  textarea { width:100%; min-height:74px; resize:vertical; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:14px; font-family:inherit; font-size:17px; line-height:1.4; }
+  textarea:focus, input:focus { outline:none; border-color:var(--accent); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  button { background:var(--accent); color:#111; border:0; border-radius:8px; padding:10px 22px; font-weight:650; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  button.ghost { background:transparent; color:var(--dim); border:1px solid var(--line); font-weight:500; padding:6px 12px; font-size:13px; }
+  button.ghost:hover { color:var(--text); border-color:var(--dim); }
+  label { color:var(--dim); font-size:13px; display:flex; gap:6px; align-items:center; }
+  select, input[type=text] { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:13px; }
+  .grid { display:grid; grid-template-columns: 1.5fr 1fr; gap:14px; margin-top:18px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; min-width:0; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.09em; color:var(--dim); margin:0 0 10px; font-weight:600; }
+  .stages { display:flex; gap:6px; margin-bottom:12px; }
+  .stage { flex:1; text-align:center; padding:6px 4px; border-radius:6px; border:1px solid var(--line); color:var(--dim); font:12px ui-monospace, Menlo, monospace; }
+  .stage.now { border-color:var(--accent); color:var(--accent); } .stage.done { border-color:#1f4d33; color:var(--ok); }
+  .scan { display:flex; gap:10px; align-items:baseline; padding:5px 0; border-top:1px solid var(--line); font-size:13.5px; }
+  .scan .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); flex:none; transform:translateY(-1px); }
+  .scan.run .dot { background:var(--accent); animation:pulse 1s infinite; } .scan.ok .dot { background:var(--ok); } .scan.bad .dot { background:var(--bad); }
+  @keyframes pulse { 50% { opacity:.25; } }
+  .scan .lab { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .scan .meta { color:var(--dim); font:12px ui-monospace, Menlo, monospace; white-space:nowrap; }
+  .note { font-size:13px; color:var(--dim); padding:4px 0; } .note.bad { color:var(--bad); } .note.fix { color:var(--info); }
+  pre { background:#0a0c0f; border:1px solid var(--line); border-radius:8px; padding:10px 12px; overflow-x:auto; font:12.5px/1.5 ui-monospace, Menlo, monospace; margin:8px 0 0; white-space:pre-wrap; }
+  .count { display:flex; justify-content:space-between; font:13px ui-monospace, Menlo, monospace; padding:3px 0; } .count b { color:var(--accent); }
+  .big { font-size:34px; font-weight:700; color:var(--accent); line-height:1.1; }
+  .tablewrap { overflow-x:auto; margin-top:8px; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th { text-align:left; color:var(--dim); font-weight:600; border-bottom:1px solid var(--line); padding:7px 10px; white-space:nowrap; position:sticky; top:0; background:var(--panel); }
+  td { padding:7px 10px; border-bottom:1px solid var(--line); max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  a { color:var(--info); text-decoration:none; } a:hover { text-decoration:underline; }
+  .mock { background:#3a1414; border:1px solid #7f1d1d; color:#fecaca; padding:8px 12px; border-radius:8px; margin-top:14px; font-weight:600; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .cat { max-height:150px; overflow:auto; font:12px ui-monospace, Menlo, monospace; color:var(--dim); margin-top:6px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Outer<span>Join</span></h1>
+    <div class="tag">SQL over the live web. Every website is a table.</div>
+    <div class="pills" id="pills"></div>
+  </header>
+
+  <textarea id="q" placeholder="Ask anything that needs live web data, joined to your own tables…"></textarea>
+  <div class="chips" id="chips"></div>
+  <div class="row">
+    <button id="go">Run query</button>
+    <label><input type="checkbox" id="chaos"> Break an agent mid-query</label>
+    <label>Freshness
+      <select id="fresh"><option value="">Live</option><option value="600">Reuse snapshots ≤ 10 min</option><option value="asof">As of 30 min ago</option></select>
+    </label>
+  </div>
+  <div id="mock" class="mock hide"></div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Query pipeline</h2>
+      <div class="stages">
+        <div class="stage" data-s="plan">1 plan · Gemini</div><div class="stage" data-s="scan">2 scan · Nimble</div>
+        <div class="stage" data-s="bind">3 bind · Tiger</div><div class="stage" data-s="execute">4 execute · SQL</div>
+      </div>
+      <div id="log"><div class="note">Run a query to watch the plan fan out across the web.</div></div>
+    </div>
+    <div class="panel">
+      <h2>Nimble calls this query</h2>
+      <div class="big" id="ncalls">0</div>
+      <div id="counts"></div>
+      <h2 style="margin-top:16px">Web tables available <span id="ncat"></span></h2>
+      <input type="text" id="catq" placeholder="filter, e.g. walmart" style="width:100%">
+      <div class="cat" id="cat"></div>
+      <h2 style="margin-top:16px">Create a table from any URL</h2>
+      <div class="row" style="margin-top:0">
+        <input type="text" id="tname" placeholder="table_name" style="width:32%">
+        <input type="text" id="turl" placeholder="https://…" style="flex:1">
+      </div>
+      <div class="row"><input type="text" id="tprompt" placeholder="what to extract, e.g. every job title and location" style="flex:1"><button class="ghost" id="tgo">Generate</button></div>
+      <div class="note" id="tout"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h2 id="rtitle">Result</h2>
+    <div class="tablewrap" id="result"><div class="note">No result yet.</div></div>
+    <pre id="sql" class="hide"></pre>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const EXAMPLES = [
+  "Which of my products is Amazon selling for less than our price right now?",
+  "Top 5 rated espresso machines under $300 on Amazon",
+  "Coffee shops near Times Square rated above 4.5",
+];
+EXAMPLES.forEach(t => { const b = document.createElement("button"); b.className = "ghost"; b.textContent = t; b.onclick = () => { $("q").value = t; }; $("chips").append(b); });
+$("q").value = EXAMPLES[0];
+
+let catalog = [];
+function drawCat() {
+  const f = $("catq").value.toLowerCase();
+  const hit = catalog.filter(t => (t.name + t.domain).toLowerCase().includes(f));
+  $("cat").innerHTML = hit.slice(0, 200).map(t => `web.${esc(t.name)} <span style="opacity:.6">(${esc(t.params.join(", "))})</span>`).join("<br>") || "none";
+}
+$("catq").oninput = drawCat;
+
+async function status() {
+  const s = await (await fetch("/api/status")).json();
+  const pill = (name, on, onText, offText) => `<span class="pill ${on ? "on" : "off"}">${name}: ${on ? onText : offText}</span>`;
+  $("pills").innerHTML = pill("Nimble", s.nimble, "live", "MOCK") + pill("Gemini", s.gemini, esc(s.model), "MOCK")
+    + pill("Tiger", s.hypertable, `hypertable · ${s.observations} obs`, `plain pg · ${s.observations} obs`) + pill("Sentry", s.sentry, "tracing", "off");
+  if (s.db_error) { $("mock").textContent = s.db_error; $("mock").classList.remove("hide"); }
+  catalog = s.web_tables; $("ncat").textContent = `(${catalog.length})`; drawCat();
+}
+status();
+
+function setStage(name) {
+  let seen = false;
+  document.querySelectorAll(".stage").forEach(el => {
+    const me = el.dataset.s === name;
+    el.className = "stage " + (me ? "now" : seen || name === null ? "" : "done");
+    if (me) seen = true;
+  });
+  if (name === "done") document.querySelectorAll(".stage").forEach(el => el.className = "stage done");
+}
+const note = (html, cls = "") => { const d = document.createElement("div"); d.className = "note " + cls; d.innerHTML = html; $("log").append(d); return d; };
+const sentryTag = id => id ? ` · Sentry event <code>${esc(String(id).slice(0, 8))}</code>` : "";
+
+function handle(e, st) {
+  if (e.type === "stage") setStage(e.stage);
+  else if (e.type === "plan") {
+    note(esc(e.plan.notes || "Plan ready."));
+    const pre = document.createElement("pre"); pre.textContent = JSON.stringify(e.plan.scans, null, 1); $("log").append(pre);
+  }
+  else if (e.type === "note") note(esc(e.text), "fix");
+  else if (e.type === "scan_start") {
+    const d = document.createElement("div"); d.className = "scan run"; d.id = "scan" + e.id;
+    d.innerHTML = `<span class="dot"></span><span class="lab">${esc(e.table)} ← ${esc(e.label)}</span><span class="meta">…</span>`;
+    $("log").append(d);
+  }
+  else if (e.type === "scan_done") {
+    const d = $("scan" + e.id); d.className = "scan ok";
+    d.querySelector(".meta").textContent = `${e.rows} rows · ${e.endpoint}${e.cached ? " @" + e.cached.slice(11) : " · " + e.ms + "ms"}${e.repaired ? " · repaired" : ""}`;
+    if (!e.cached) { st.n++; st.by[e.endpoint] = (st.by[e.endpoint] || 0) + 1; counts(st); }
+  }
+  else if (e.type === "scan_fail") {
+    const d = $("scan" + e.id); d.className = "scan " + (e.final ? "bad" : "run");
+    d.querySelector(".meta").textContent = e.final ? "failed" : "repairing…";
+    if ("sentry" in e) { st.n++; st.by["failed"] = (st.by["failed"] || 0) + 1; counts(st); }
+    const fix = e.repair ? note(`↻ repair: retrying as ${esc(e.repair)}`, "fix") : null;
+    const bad = note(`✕ ${esc(e.error)}${sentryTag(e.sentry)}`, "bad");
+    d.after(bad); if (fix) bad.after(fix);
+  }
+  else if (e.type === "table") note(`▦ ${esc(e.table)}: ${e.rows} rows × ${e.columns.length} cols <span style="opacity:.6">(${esc(e.columns.slice(0, 7).join(", "))}…)</span>`);
+  else if (e.type === "sql") { $("sql").textContent = e.sql; $("sql").classList.remove("hide"); if (e.attempt > 1) note(`↻ SQL rewritten (attempt ${e.attempt})`, "fix"); }
+  else if (e.type === "sql_fail") note(`✕ SQL error: ${esc(e.error)}${sentryTag(e.sentry)}`, "bad");
+  else if (e.type === "error") { note(`✕ ${esc(e.error)}${sentryTag(e.sentry)}`, "bad"); setStage(null); }
+  else if (e.type === "result") { setStage("done"); render(e); }
+}
+function counts(st) {
+  $("ncalls").textContent = st.n;
+  $("counts").innerHTML = Object.entries(st.by).map(([k, v]) => `<div class="count"><span>${esc(k)}</span><b>${v}</b></div>`).join("");
+}
+function render(e) {
+  const m = [];
+  if (e.mock.nimble) m.push("Nimble is in MOCK mode: these rows are fake placeholders, not web data.");
+  if (e.mock.gemini) m.push("Gemini is in MOCK mode: the plan and SQL are canned.");
+  $("mock").textContent = m.join(" "); $("mock").classList.toggle("hide", !m.length);
+  $("rtitle").textContent = `Result · ${e.rows.length} rows · ${(e.ms / 1000).toFixed(1)}s`;
+  if (!e.rows.length) { $("result").innerHTML = '<div class="note">Query ran, 0 rows matched.</div>'; return; }
+  const cell = v => v === null ? '<td style="opacity:.4">–</td>'
+    : typeof v === "number" ? `<td class="num">${Number.isInteger(v) ? v : v.toFixed(2)}</td>`
+    : /^https?:\/\//.test(v) ? `<td><a href="${esc(v)}" target="_blank" rel="noopener">${esc(new URL(v).hostname.replace("www.", ""))} ↗</a></td>`
+    : `<td title="${esc(v)}">${esc(v)}</td>`;
+  $("result").innerHTML = `<table><thead><tr>${e.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>`
+    + e.rows.map(r => `<tr>${r.map(cell).join("")}</tr>`).join("") + "</tbody></table>";
+}
+
+$("go").onclick = async () => {
+  const question = $("q").value.trim(); if (!question) return;
+  $("go").disabled = true; $("log").innerHTML = ""; $("sql").classList.add("hide"); setStage(null);
+  const st = { n: 0, by: {} }; counts(st);
+  const body = { question, chaos: $("chaos").checked };
+  const f = $("fresh").value;
+  if (f === "asof") body.as_of = new Date(Date.now() - 30 * 60000).toISOString(); else if (f) body.max_age_s = +f;
+  try {
+    const res = await fetch("/api/query", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (line.trim()) handle(JSON.parse(line), st); }
+    }
+  } catch (err) { note("✕ " + esc(err.message), "bad"); }
+  $("go").disabled = false; status();
+};
+$("q").addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("go").click(); });
+
+$("tgo").onclick = async () => {
+  $("tout").textContent = "Nimble is generating a template… this can take a minute or two."; $("tgo").disabled = true;
+  try {
+    const r = await (await fetch("/api/tables", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("tname").value.trim(), url: $("turl").value.trim(), prompt: $("tprompt").value.trim() }) })).json();
+    $("tout").textContent = r.error ? "✕ " + r.error : `✓ web.${r.name} is live. Params: ${r.params.join(", ") || "none"}. Columns: ${r.columns.join(", ")}`;
+  } catch (err) { $("tout").textContent = "✕ " + err.message; }
+  $("tgo").disabled = false; status();
+};
+</script>
+</body>
+</html>
