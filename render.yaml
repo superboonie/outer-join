@@ -1,4 +1,9 @@
-# One-click hosting on Render. Each key marked "sync: false" is asked for in a form at deploy time.
+# One-step hosting on Render: this file creates the web app AND its database.
+# You are only asked for the two keys marked "sync: false".
+databases:
+  - name: outerjoin-db
+    plan: free
+
 services:
   - type: web
     name: outerjoin
@@ -13,10 +18,10 @@ services:
       - key: GEMINI_MODEL
         value: gemini-flash-latest
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: outerjoin-db
+          property: connectionString
       - key: NIMBLE_API_KEY
         sync: false
       - key: GEMINI_API_KEY
-        sync: false
-      - key: SENTRY_DSN
         sync: false

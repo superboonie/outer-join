@@ -128,7 +128,9 @@ async function status() {
   const s = await (await fetch("/api/status")).json();
   const pill = (name, on, onText, offText) => `<span class="pill ${on ? "on" : "off"}">${name}: ${on ? onText : offText}</span>`;
   $("pills").innerHTML = pill("Nimble", s.nimble, "live", "MOCK") + pill("Gemini", s.gemini, esc(s.model), "MOCK")
-    + pill("Tiger", s.hypertable, `hypertable · ${s.observations} obs`, `plain pg · ${s.observations} obs`) + pill("Sentry", s.sentry, "tracing", "off");
+    + `<span class="pill on">${s.hypertable ? "Tiger hypertable" : "Postgres"}: ${s.observations} rows stored</span>`
+    + (s.sentry ? pill("Sentry", true, "tracing", "") : "");
+  document.querySelector('[data-s="bind"]').textContent = "3 bind · " + (s.hypertable ? "Tiger" : "Postgres");
   if (s.db_error) { $("mock").textContent = s.db_error; $("mock").classList.remove("hide"); }
   catalog = s.web_tables; $("ncat").textContent = `(${catalog.length})`; drawCat();
 }
