@@ -102,3 +102,46 @@ def new_table(t: NewTable):
     except Exception as e:
         sentry_sdk.capture_exception(e)
         return JSONResponse({"error": str(e)[:400]}, status_code=500)
+
+
+def _shape(o, d=0):
+    """Structure of a response without the bulk: keys, list lengths, short strings."""
+    if isinstance(o, dict):
+        if d >= 6:
+            return f"dict({len(o)})"
+        return {k: _shape(v, d + 1) for k, v in list(o.items())[:40]}
+    if isinstance(o, list):
+        return {"_list_len": len(o), "_first": _shape(o[0], d + 1) if o else None}
+    if isinstance(o, str):
+        return o[:70]
+    return o
+
+
+@app.get("/api/debug")
+def debug(template: str = "amazon_serp", keyword: str = "airpods pro", n: str = ""):
+    """Temporary diagnostic: what does a template run actually return?"""
+    import httpx
+    out = {}
+    key = llm.clean_key("NIMBLE_API_KEY")
+    try:
+        r = httpx.post("https://sdk.nimbleway.com/v2/extract/templates/run", timeout=120,
+                       headers={"Authorization": f"Bearer {key}"}, json={"template": template, "params": {"keyword": keyword}})
+        out["raw_status"] = r.status_code
+        body = r.json()
+        out["raw_shape"] = _shape(body)
+    except Exception as e:
+        out["raw_error"] = repr(e)[:300]
+    try:
+        res = sources.client().extract.templates.run(template=template, params={"keyword": keyword}).to_dict()
+        out["sdk_shape"] = _shape(res)
+        out["find_rows_count"] = len(sources.find_rows((res.get("data") or {}).get("parsing")))
+    except Exception as e:
+        out["sdk_error"] = repr(e)[:300]
+    try:
+        meta = sources.client().extract.templates.get(template).to_dict()
+        pv = meta.get("published_version") or meta
+        out["input_schema"] = pv.get("input_schema")
+        out["meta_keys"] = list(meta.keys())
+    except Exception as e:
+        out["meta_error"] = repr(e)[:300]
+    return out
