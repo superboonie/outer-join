@@ -145,3 +145,54 @@ def debug(template: str = "amazon_serp", keyword: str = "airpods pro", n: str = 
     except Exception as e:
         out["meta_error"] = repr(e)[:300]
     return out
+
+
+@app.get("/api/debug2")
+def debug2(keyword: str = "airpods pro", n: str = ""):
+    """Temporary diagnostic: which Nimble route returns product rows with prices?"""
+    from concurrent.futures import ThreadPoolExecutor
+    c = sources.client()
+    url = "https://www.amazon.com/s?k=" + keyword.replace(" ", "+")
+
+    def tpl(**kw):
+        res = c.extract.templates.run(**kw).to_dict()
+        d = res.get("data") or {}
+        return {"parsing": _shape(d.get("parsing")), "markdown_len": len(d.get("markdown") or ""),
+                "markdown_head": (d.get("markdown") or "")[:400], "driver": (res.get("metadata") or {}).get("driver")}
+
+    def srch(**kw):
+        res = c.search(**kw).to_dict()
+        rs = res.get("results") or []
+        return {"count": len(rs), "first": _shape(rs[0]) if rs else None, "second": _shape(rs[1]) if len(rs) > 1 else None,
+                "answer": (res.get("answer") or "")[:200]}
+
+    def ext(**kw):
+        res = c.extract.run(**kw).to_dict()
+        d = res.get("data") or {}
+        md = d.get("markdown") or ""
+        return {"markdown_len": len(md), "markdown_head": md[:300], "markdown_mid": md[3000:3600],
+                "parsing": _shape(d.get("parsing")), "driver": (res.get("metadata") or {}).get("driver")}
+
+    jobs = {
+        "tpl_country": lambda: tpl(template="amazon_serp", params={"keyword": keyword, "country": "US"}),
+        "tpl_zip": lambda: tpl(template="amazon_serp", params={"keyword": keyword, "zip_code": "10001"}, localization=True),
+        "tpl_markdown": lambda: tpl(template="amazon_serp", params={"keyword": keyword}, formats=["markdown"]),
+        "tpl_page1": lambda: tpl(template="amazon_serp", params={"keyword": keyword, "page": 1}),
+        "search_domain": lambda: srch(query=keyword + " price", include_domains=["amazon.com"], max_results=5),
+        "search_shopping": lambda: srch(query=keyword, focus="shopping", max_results=5),
+        "search_plain": lambda: srch(query=keyword + " price amazon", max_results=5),
+        "extract_md": lambda: ext(url=url, formats=["markdown"]),
+        "extract_render": lambda: ext(url=url, formats=["markdown"], render=True),
+    }
+    out = {"names": [k for k in sources.catalog() if any(w in k for w in ("amazon", "walmart", "shopping", "ebay", "target", "best_buy", "google_s", "google_m")) and "community" not in k][:60]}
+
+    def run(item):
+        k, f = item
+        try:
+            return k, f()
+        except Exception as e:
+            return k, {"error": repr(e)[:300]}
+
+    with ThreadPoolExecutor(max_workers=9) as pool:
+        out.update(dict(pool.map(run, jobs.items())))
+    return out

@@ -184,6 +184,7 @@ def scan(call, chaos=False):
         endpoint, default = "extract.run", call["url"]
     else:
         raise ValueError(f"unknown scan kind {kind}")
+    rows = [r for r in rows if isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values())]
     if not rows:
         raise EmptyScan(f"0 rows from {call.get('label')}")
     for r in rows:
