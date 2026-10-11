@@ -8,6 +8,7 @@
 """
 import hashlib
 import os
+import re
 import threading
 import time
 
@@ -146,7 +147,9 @@ def _mock_rows(label):
 
 
 PAGE_COLS = ("name (the item's title), price (a number, no currency sign), rating (a number), reviews (a number), "
-             "url (absolute link to the item if shown), plus any other clearly useful field. One row per listed item.")
+             "sponsored (true/false). One row per listed item.")
+MATCH_COL = (" Also add match: true only when the listing is the product '{t}' itself (same brand and model, new), "
+             "false for accessories, cases, replacement parts, bundles of other items, or different models.")
 
 
 def _solid(rows):
@@ -154,8 +157,17 @@ def _solid(rows):
     return [r for r in rows if isinstance(r, dict) and any(v not in (None, "", [], {}) for v in r.values())]
 
 
-def _rows_from_page(md, cols=None):
-    out = llm.ask_json(llm.EXTRACT.format(cols=cols or PAGE_COLS, page=md[:60000]), fast=True)
+def compact(md):
+    """Web pages in markdown are mostly link targets. Strip them so the page fits in one fast model call."""
+    md = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", md)
+    md = re.sub(r"\]\([^)\s]*(?:\s+\"[^\"]*\")?\)", "]", md)
+    md = re.sub(r"[ \t]+", " ", md)
+    return re.sub(r"\n\s*\n+", "\n", md)
+
+
+def _rows_from_page(md, cols=None, target=""):
+    want = cols or (PAGE_COLS + (MATCH_COL.format(t=target) if target else ""))
+    out = llm.ask_json(llm.EXTRACT.format(cols=want, page=compact(md)[:45000]), fast=True)
     return _solid(out.get("rows") or [])
 
 
@@ -171,26 +183,23 @@ def scan(call, chaos=False):
         rows = _mock_rows(str(call.get("label")))
         endpoint, default = "MOCK", ""
     elif kind == "template":
-        res = client().extract.templates.run(template=call["template"], params=call["params"], formats=["markdown"]).to_dict()
+        res = client().extract.templates.run(template=call["template"], params=call["params"]).to_dict()
         _count("extract.templates.run")
-        data = res.get("data") or {}
         endpoint, default = "extract.templates.run", res.get("url")
         try:
-            rows = _solid(find_rows(data.get("parsing")))
+            rows = _solid(find_rows((res.get("data") or {}).get("parsing")))
         except EmptyScan:
             rows = []
-        if not rows:  # Nimble fetched the page but the template's parser came back empty: structure the page with Gemini
-            md = data.get("markdown") or ""
-            if md.strip():
-                rows = _rows_from_page(md, call.get("columns"))
-                endpoint = "extract.templates.run + gemini"
-        if not rows and default:  # last try: fetch the same URL through plain Extract with rendering
-            res2 = client().extract.run(url=default, formats=["markdown"], render=True).to_dict()
+        if not rows and default:
+            # The template resolved the page but its parser came back empty. Fetch that same URL
+            # through Nimble Extract and let Gemini shape the page into rows.
+            res2 = client().extract.run(url=default, formats=["markdown"]).to_dict()
             _count("extract.run")
             md = (res2.get("data") or {}).get("markdown") or ""
             if md.strip():
-                rows = _rows_from_page(md, call.get("columns"))
-                endpoint = "extract.run + gemini"
+                target = " ".join(str(v) for v in (call.get("params") or {}).values() if isinstance(v, str))
+                rows = _rows_from_page(md, call.get("columns"), target)
+                endpoint = "templates.run + extract.run"
     elif kind == "search":
         kw = {"query": call["query"], "max_results": 10}
         if call.get("domains"):

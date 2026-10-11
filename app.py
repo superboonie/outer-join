@@ -298,3 +298,35 @@ def debug_one(job: str, q: str = "airpods pro", domain: str = "", focus: str = "
         return {"error": "job must be search, tpl, extract or scan"}
     except Exception as e:
         return {"error": repr(e)[:400]}
+
+
+RUNS = {}
+
+
+@app.get("/api/run_start")
+def run_start(q: str, chaos: bool = False, n: str = ""):
+    """Start a query in the background; poll /api/run_get?id=... for its events."""
+    import uuid
+    rid = uuid.uuid4().hex[:8]
+    RUNS[rid] = []
+
+    def job():
+        engine.run(q, RUNS[rid].append, chaos=chaos)
+        RUNS[rid].append({"type": "done"})
+
+    threading.Thread(target=job, daemon=True).start()
+    return {"id": rid}
+
+
+@app.get("/api/run_get")
+def run_get_events(id: str, n: str = ""):
+    ev = RUNS.get(id)
+    if ev is None:
+        return {"error": "unknown id"}
+    out = []
+    for e in list(ev):
+        e = dict(e)
+        if e.get("type") == "result":
+            e["rows"] = e["rows"][:10]
+        out.append(e)
+    return out

@@ -163,7 +163,7 @@ def _run(tx, question, emit, chaos, max_age_s, as_of):
         # 1. plan
         emit({"type": "stage", "stage": "plan"})
         if llm.live():
-            plan = llm.ask_json(llm.PLAN.format(q=question, local=local_text, catalog=sources.catalog_text()))
+            plan = llm.ask_json(llm.PLAN.format(q=question, local=local_text, catalog=sources.catalog_text()), fast=True)
         else:
             plan = _mock_plan(question, local)
         emit({"type": "plan", "plan": plan})

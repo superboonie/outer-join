@@ -79,6 +79,9 @@ Rules:
 - When one local row matches many web rows, keep the best one with JOIN LATERAL ... LIMIT 1.
 - Always select _source from each web table you use (alias source, source_2, ...).
 - Columns typed double precision are already numbers. Use ILIKE for fuzzy text.
+- If a web table has a boolean column named match, require match = true: it marks listings that are
+  the same product as the local row, not accessories. Ignore rows where sponsored is true if that column exists.
+- Never reference a column that is not listed. If the ideal column is missing, use the closest one.
 - LIMIT 50.
 {feedback}
 Return JSON: {{"sql": "..."}}"""
